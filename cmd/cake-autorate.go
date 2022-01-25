@@ -183,7 +183,7 @@ func main() {
 	}()
 
 	tickerCancelSignal := make(chan os.Signal, 1)
-	signal.Notify(pingerCancelSignal, os.Interrupt)
+	signal.Notify(tickerCancelSignal, os.Interrupt)
 	tickerExitChannel := make(chan *error)
 	go func() {
 		// Ensure we received a few ping replies to establish the baseline
@@ -338,7 +338,7 @@ func readSysFsBytes(path string) uint64 {
 		return 0
 	}
 
-	str := string(bytes[:len(bytes) - 1])
+	str := string(bytes[:len(bytes)-1])
 	result, err := strconv.ParseUint(str, 10, 64)
 	if err != nil {
 		log.Printf("Failed to read stats file %s result '%s'\n", path, str)
