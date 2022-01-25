@@ -1,7 +1,8 @@
 package main
 
 import (
-	bytes "bytes"
+	"bytes"
+	"context"
 	"flag"
 	"fmt"
 	"github.com/go-ping/ping"
@@ -157,13 +158,8 @@ func main() {
 	pinger.RecordRtts = false
 	pinger.SetPrivileged(true)
 
-	pingerCancelSignal := make(chan os.Signal, 1)
-	signal.Notify(pingerCancelSignal, os.Interrupt)
-	go func() {
-		for range pingerCancelSignal {
-			pinger.Stop()
-		}
-	}()
+	ctx, cancelNotify := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer cancelNotify()
 
 	lastSeqReceived := 0
 	var lastPingReply atomic.Value
@@ -183,10 +179,10 @@ func main() {
 		pingerExitChannel <- err
 	}()
 
-	tickerCancelSignal := make(chan os.Signal, 1)
-	signal.Notify(tickerCancelSignal, os.Interrupt)
 	tickerExitChannel := make(chan *error)
 	go func() {
+		defer pinger.Stop()
+
 		// Ensure we received a few ping replies to establish the baseline
 		time.Sleep(*tickDuration * 2)
 
@@ -206,7 +202,7 @@ func main() {
 		for {
 			breakLoop := false
 			select {
-			case <-tickerCancelSignal:
+			case <-ctx.Done():
 				breakLoop = true
 				break
 
