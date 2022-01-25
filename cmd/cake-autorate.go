@@ -317,6 +317,9 @@ func main() {
 		os.Exit(1)
 	}
 
+	setCakeRate(*downloadInterface, *maxDownloadRateKilobits)
+	setCakeRate(*uploadInterface, *maxUploadRateKilobits)
+
 	statistics := pinger.Statistics()
 	if statistics != nil {
 		log.Printf("Max RTT: %s\n", statistics.MaxRtt)
