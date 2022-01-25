@@ -179,10 +179,13 @@ func main() {
 		pingerExitChannel <- err
 	}()
 
+	go func() {
+		<-ctx.Done()
+		pinger.Stop()
+	}()
+
 	tickerExitChannel := make(chan *error)
 	go func() {
-		defer pinger.Stop()
-
 		// Ensure we received a few ping replies to establish the baseline
 		time.Sleep(*tickDuration * 2)
 
