@@ -191,10 +191,10 @@ func main() {
 
 		pingReply := lastPingReply.Load().(*PingReply)
 		baselineRtt := pingReply.Packet.Rtt
-		uploadRateKilobits := *maxUploadRateKilobits / 2
 		downloadRateKilobits := *maxDownloadRateKilobits / 2
-		setCakeRate(*uploadInterface, uploadRateKilobits)
+		uploadRateKilobits := *maxUploadRateKilobits / 2
 		setCakeRate(*downloadInterface, downloadRateKilobits)
+		setCakeRate(*uploadInterface, uploadRateKilobits)
 
 		lastRxBytes := readSysFsBytes(rxBytesPath)
 		lastTxBytes := readSysFsBytes(txBytesPath)
@@ -282,7 +282,7 @@ func main() {
 				setCakeRate(*uploadInterface, uploadRateKilobits)
 
 				log.Printf(
-					"rxLoad: %d;txLoad: %d; baselineRtt: %s; newRtt: %s; rttDelta: %s; dlRate: %d; ulRate: %d;\n",
+					"rxLoad: %d; txLoad: %d; baselineRtt: %s; newRtt: %s; rttDelta: %s; dl: %dKbit; ul: %dKbit;\n",
 					rxLoad,
 					txLoad,
 					baselineRtt,
@@ -325,9 +325,9 @@ func main() {
 
 func setCakeRate(interfaceName string, kilobitsPerSecond uint64) {
 	cmd := exec.Command(fmt.Sprintf("tc qdisc change root dev %s cake bandwidth %dKbit", interfaceName, kilobitsPerSecond))
-	_, err := cmd.Output()
+	output, err := cmd.Output()
 	if err != nil {
-		log.Printf("Failed to set qdisc rate %d for %s\n", kilobitsPerSecond, interfaceName)
+		log.Printf("Failed to set qdisc rate %d for %s: %s - %s\n", kilobitsPerSecond, interfaceName, err, output)
 	}
 }
 
