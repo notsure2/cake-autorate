@@ -1,6 +1,7 @@
 package main
 
 import (
+	bytes "bytes"
 	"flag"
 	"fmt"
 	"github.com/go-ping/ping"
@@ -326,19 +327,20 @@ func main() {
 func setCakeRate(interfaceName string, kilobitsPerSecond uint64) {
 	cmd := exec.Command("tc", "qdisc", "change", "root", "dev", interfaceName, "cake", "bandwidth", fmt.Sprintf("%dKbit", kilobitsPerSecond))
 	output, err := cmd.CombinedOutput()
+	output = bytes.Trim(output, "\n")
 	if err != nil {
-		log.Printf("Failed to set qdisc rate %d for %s: %s - %s\n", kilobitsPerSecond, interfaceName, err, output[:len(output)-1])
+		log.Printf("Failed to set qdisc rate %d for %s: %s - %s\n", kilobitsPerSecond, interfaceName, err, output)
 	}
 }
 
 func readSysFsBytes(path string) uint64 {
-	bytes, err := ioutil.ReadFile(path) // just pass the file name
+	readBytes, err := ioutil.ReadFile(path) // just pass the file name
 	if err != nil {
 		log.Printf("Failed to read stats file %s\n", path)
 		return 0
 	}
 
-	str := string(bytes[:len(bytes)-1])
+	str := string(bytes.Trim(readBytes, "\n"))
 	result, err := strconv.ParseUint(str, 10, 64)
 	if err != nil {
 		log.Printf("Failed to read stats file %s result '%s'\n", path, str)
