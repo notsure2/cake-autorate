@@ -6,12 +6,11 @@ import (
 	"flag"
 	"fmt"
 	"github.com/go-ping/ping"
-	"io/ioutil"
+	"github.com/vishvananda/netlink"
 	"log"
 	"os"
 	"os/exec"
 	"os/signal"
-	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -118,18 +117,26 @@ func main() {
 		os.Exit(1)
 	}
 
-	var rxBytesPath string
+	var rxBytesMemberAccessor func(statistics *netlink.LinkStatistics) uint64
 	if strings.HasPrefix(*downloadInterface, "veth") || strings.HasPrefix(*uploadInterface, "ifb") {
-		rxBytesPath = fmt.Sprintf("/sys/class/net/%s/statistics/tx_bytes", *downloadInterface)
+		rxBytesMemberAccessor = func(statistics *netlink.LinkStatistics) uint64 {
+			return statistics.TxBytes
+		}
 	} else {
-		rxBytesPath = fmt.Sprintf("/sys/class/net/%s/statistics/rx_bytes", *downloadInterface)
+		rxBytesMemberAccessor = func(statistics *netlink.LinkStatistics) uint64 {
+			return statistics.RxBytes
+		}
 	}
 
-	var txBytesPath string
+	var txBytesMemberAccessor func(statistics *netlink.LinkStatistics) uint64
 	if strings.HasPrefix(*uploadInterface, "veth") || strings.HasPrefix(*uploadInterface, "ifb") {
-		txBytesPath = fmt.Sprintf("/sys/class/net/%s/statistics/rx_bytes", *downloadInterface)
+		txBytesMemberAccessor = func(statistics *netlink.LinkStatistics) uint64 {
+			return statistics.RxBytes
+		}
 	} else {
-		txBytesPath = fmt.Sprintf("/sys/class/net/%s/statistics/tx_bytes", *downloadInterface)
+		txBytesMemberAccessor = func(statistics *netlink.LinkStatistics) uint64 {
+			return statistics.TxBytes
+		}
 	}
 
 	log.Printf(
@@ -144,8 +151,6 @@ func main() {
 		*maxDownloadRateKilobits,
 		*minDownloadRateKilobits)
 
-	log.Printf("rxBytesPath: %s\n", rxBytesPath)
-	log.Printf("txBytesPath: %s\n", txBytesPath)
 	log.Printf("reflectorHost: %s\n", *reflectorHost)
 
 	pinger, err := ping.NewPinger(*reflectorHost)
@@ -196,8 +201,8 @@ func main() {
 		setCakeRate(*downloadInterface, downloadRateKilobits)
 		setCakeRate(*uploadInterface, uploadRateKilobits)
 
-		lastRxBytes := readSysFsBytes(rxBytesPath)
-		lastTxBytes := readSysFsBytes(txBytesPath)
+		lastRxBytes := getInterfaceBytes(*downloadInterface, rxBytesMemberAccessor)
+		lastTxBytes := getInterfaceBytes(*uploadInterface, txBytesMemberAccessor)
 		lastBytesReadTime := time.Now()
 
 		ticker := time.NewTicker(*tickDuration)
@@ -221,8 +226,8 @@ func main() {
 				newBaselineRttMs := int64(((1 - rttFactor) * float64(baselineRtt.Milliseconds())) + (rttFactor * float64(newRtt.Milliseconds())))
 				baselineRtt = time.Duration(newBaselineRttMs) * time.Millisecond
 
-				rxBytes := readSysFsBytes(rxBytesPath)
-				txBytes := readSysFsBytes(txBytesPath)
+				rxBytes := getInterfaceBytes(*downloadInterface, rxBytesMemberAccessor)
+				txBytes := getInterfaceBytes(*uploadInterface, txBytesMemberAccessor)
 				bytesReadTime := time.Now()
 				rxBytesDelta := rxBytes - lastRxBytes
 				if rxBytesDelta < 0 {
@@ -335,18 +340,13 @@ func setCakeRate(interfaceName string, kilobitsPerSecond uint64) {
 	}
 }
 
-func readSysFsBytes(path string) uint64 {
-	readBytes, err := ioutil.ReadFile(path) // just pass the file name
+func getInterfaceBytes(interfaceName string, memberAccessor func(statistics *netlink.LinkStatistics) uint64) uint64 {
+	interfaceObj, err := netlink.LinkByName(interfaceName)
 	if err != nil {
-		log.Printf("Failed to read stats file %s\n", path)
+		log.Printf("Failed to get interface through netlink: %s\n", err)
 		return 0
 	}
 
-	str := string(bytes.Trim(readBytes, "\n"))
-	result, err := strconv.ParseUint(str, 10, 64)
-	if err != nil {
-		log.Printf("Failed to read stats file %s result '%s'\n", path, str)
-		return 0
-	}
-	return result
+	statistics := interfaceObj.Attrs().Statistics
+	return memberAccessor(statistics)
 }
