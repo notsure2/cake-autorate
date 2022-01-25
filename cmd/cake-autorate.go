@@ -239,7 +239,7 @@ func main() {
 
 				nextUploadRateKilobits := uploadRateKilobits
 				nextDownloadRateKilobits := downloadRateKilobits
-				if uint64(rttDelta.Milliseconds()) >= *rttSpikeThresholdMs {
+				if pingReply.PacketsLost || uint64(rttDelta.Milliseconds()) >= *rttSpikeThresholdMs {
 					nextDownloadRateKilobits = downloadRateKilobits - uint64(*rateAdjustOnRttSpikeFactor*float64(*maxDownloadRateKilobits-*minDownloadRateKilobits))
 					nextUploadRateKilobits = uploadRateKilobits - uint64(*rateAdjustOnRttSpikeFactor*float64(*maxUploadRateKilobits-*minUploadRateKilobits))
 				} else {
