@@ -324,10 +324,10 @@ func main() {
 }
 
 func setCakeRate(interfaceName string, kilobitsPerSecond uint64) {
-	cmd := exec.Command(fmt.Sprintf("tc qdisc change root dev %s cake bandwidth %dKbit", interfaceName, kilobitsPerSecond))
-	output, err := cmd.Output()
+	cmd := exec.Command("tc", "qdisc", "change", "root", "dev", interfaceName, "cake", "bandwidth", fmt.Sprintf("%dKbit", kilobitsPerSecond))
+	output, err := cmd.CombinedOutput()
 	if err != nil {
-		log.Printf("Failed to set qdisc rate %d for %s: %s - %s\n", kilobitsPerSecond, interfaceName, err, output)
+		log.Printf("Failed to set qdisc rate %d for %s: %s - %s\n", kilobitsPerSecond, interfaceName, err, output[:len(output)-1])
 	}
 }
 
