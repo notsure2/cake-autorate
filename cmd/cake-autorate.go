@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 )
@@ -168,14 +169,24 @@ func main() {
 
 	lastSeqReceived := 0
 	var lastPingReply atomic.Value
+	initialSamplePingRepliesReceived := make(chan bool)
+	var initialSamplePingRepliesReceivedOnce sync.Once
 
 	pinger.OnRecv = func(packet *ping.Packet) {
 		reply := PingReply{
 			Packet:      packet,
 			PacketsLost: packet.Seq > lastSeqReceived+1,
 		}
+
 		lastSeqReceived = packet.Seq
 		lastPingReply.Store(&reply)
+
+		if pinger.PacketsRecv > 5 {
+			initialSamplePingRepliesReceivedOnce.Do(func() {
+				initialSamplePingRepliesReceived <- true
+				close(initialSamplePingRepliesReceived)
+			})
+		}
 	}
 
 	pingerExitChannel := make(chan error)
@@ -191,11 +202,15 @@ func main() {
 
 	tickerExitChannel := make(chan *error)
 	go func() {
-		// Ensure we received a few ping replies to establish the baseline
-		time.Sleep(*tickDuration * 2)
+		log.Printf("Collecting initial sample of ping replies...")
+		select {
+		case <-ctx.Done():
+			return
 
-		pingReply := lastPingReply.Load().(*PingReply)
-		baselineRtt := pingReply.Packet.Rtt
+		case <-initialSamplePingRepliesReceived:
+			break
+		}
+		baselineRtt := float64(pinger.Statistics().MinRtt.Milliseconds())
 		downloadRateKilobits := *maxDownloadRateKilobits / 2
 		uploadRateKilobits := *maxUploadRateKilobits / 2
 		setCakeRate(*downloadInterface, downloadRateKilobits)
@@ -215,16 +230,15 @@ func main() {
 				break
 
 			case <-ticker.C:
-				pingReply = lastPingReply.Load().(*PingReply)
+				pingReply := lastPingReply.Load().(*PingReply)
 				newRtt := pingReply.Packet.Rtt
 
-				rttDelta := pingReply.Packet.Rtt - baselineRtt
+				rttDelta := float64(pingReply.Packet.Rtt.Milliseconds()) - baselineRtt
 				rttFactor := *rttIncreaseFactor
 				if rttDelta < 0 {
 					rttFactor = *rttDecreaseFactor
 				}
-				newBaselineRttMs := int64(((1 - rttFactor) * float64(baselineRtt.Milliseconds())) + (rttFactor * float64(newRtt.Milliseconds())))
-				baselineRtt = time.Duration(newBaselineRttMs) * time.Millisecond
+				baselineRtt = ((1 - rttFactor) * baselineRtt) + (rttFactor * float64(newRtt.Milliseconds()))
 
 				rxBytes := getInterfaceBytes(*downloadInterface, rxBytesMemberAccessor)
 				txBytes := getInterfaceBytes(*uploadInterface, txBytesMemberAccessor)
@@ -244,7 +258,7 @@ func main() {
 
 				nextUploadRateKilobits := uploadRateKilobits
 				nextDownloadRateKilobits := downloadRateKilobits
-				if pingReply.PacketsLost || uint64(rttDelta.Milliseconds()) >= *rttSpikeThresholdMs {
+				if pingReply.PacketsLost || rttDelta >= float64(*rttSpikeThresholdMs) {
 					nextDownloadRateKilobits = downloadRateKilobits - uint64(*rateAdjustOnRttSpikeFactor*float64(*maxDownloadRateKilobits-*minDownloadRateKilobits))
 					nextUploadRateKilobits = uploadRateKilobits - uint64(*rateAdjustOnRttSpikeFactor*float64(*maxUploadRateKilobits-*minUploadRateKilobits))
 				} else {
@@ -287,7 +301,7 @@ func main() {
 				setCakeRate(*uploadInterface, uploadRateKilobits)
 
 				log.Printf(
-					"rxLoad: %d; txLoad: %d; baselineRtt: %s; newRtt: %s; rttDelta: %s; dl: %dKbit; ul: %dKbit;\n",
+					"rxLoad: %d; txLoad: %d; baselineRtt: %14.2fms; newRtt: %s; rttDelta: %14.2fms; dl: %dKbit; ul: %dKbit;\n",
 					rxLoad,
 					txLoad,
 					baselineRtt,
