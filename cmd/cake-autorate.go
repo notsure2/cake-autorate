@@ -301,12 +301,13 @@ func main() {
 				setCakeRate(*uploadInterface, uploadRateKilobits)
 
 				log.Printf(
-					"rxLoad: %d; txLoad: %d; baselineRtt: %14.2fms; newRtt: %s; rttDelta: %14.2fms; dl: %dKbit; ul: %dKbit;\n",
+					"rx%%: %d; tx%%: %d; baseRtt: %.2fms; rtt: %s; delta: %.2fms; loss: %v; dl: %dKbit; ul: %dKbit;\n",
 					rxLoad,
 					txLoad,
 					baselineRtt,
 					newRtt,
 					rttDelta,
+					pingReply.PacketsLost,
 					nextDownloadRateKilobits,
 					nextUploadRateKilobits)
 			}
