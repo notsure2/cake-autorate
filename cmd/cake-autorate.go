@@ -38,6 +38,7 @@ func main() {
 	loadThreshold := flag.Uint64("loadThreshold", 50, "% of currently set bandwidth for detecting high load")
 	rttSpikeThresholdMs := flag.Uint64("rttSpikeThresholdMs", 15, "increase from baseline RTT for detection of bufferbloat in ms")
 	reflectorHost := flag.String("reflectorHost", "1.1.1.1", "host to use for measuring ping")
+	ignoreLoss := flag.Bool("ignoreLoss", false, "do not consider probe reply loss as bufferbloat (for lossy connections)")
 	flag.Parse()
 
 	if *uploadInterface == "" {
@@ -258,7 +259,7 @@ func main() {
 
 				nextUploadRateKilobits := uploadRateKilobits
 				nextDownloadRateKilobits := downloadRateKilobits
-				if pingReply.PacketsLost || rttDelta >= float64(*rttSpikeThresholdMs) {
+				if (!*ignoreLoss && pingReply.PacketsLost) || rttDelta >= float64(*rttSpikeThresholdMs) {
 					nextDownloadRateKilobits = downloadRateKilobits - uint64(*rateAdjustOnRttSpikeFactor*float64(*maxDownloadRateKilobits-*minDownloadRateKilobits))
 					nextUploadRateKilobits = uploadRateKilobits - uint64(*rateAdjustOnRttSpikeFactor*float64(*maxUploadRateKilobits-*minUploadRateKilobits))
 				} else {
