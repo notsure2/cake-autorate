@@ -36,7 +36,7 @@ func main() {
 	rateLoadIncreaseFactor := flag.Float64("rateLoadIncreaseFactor", 0.0125, "how rapidly to increase bandwidth upon high load detected")
 	rateLoadDecreaseFactor := flag.Float64("rateLoadDecreaseFactor", 0, "how rapidly to decrease bandwidth upon low load detected")
 	loadThreshold := flag.Uint64("loadThreshold", 50, "% of currently set bandwidth for detecting high load")
-	rttSpikeThresholdMs := flag.Uint64("rttSpikeThresholdMs", 15, "increase from baseline RTT for detection of bufferbloat in ms")
+	rttSpikeThresholdPercentage := flag.Uint64("rttSpikeThresholdPercentage", 50, "increase from baseline RTT for detection of bufferbloat in percent")
 	reflectorHost := flag.String("reflectorHost", "1.1.1.1", "host to use for measuring ping")
 	ignoreLoss := flag.Bool("ignoreLoss", false, "do not consider probe reply loss as bufferbloat (for lossy connections)")
 	flag.Parse()
@@ -114,8 +114,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	if *rttSpikeThresholdMs < 15 {
-		fmt.Println("rtt spike threshold must be 15 or greater")
+	if *rttSpikeThresholdPercentage < 15 {
+		fmt.Println("rtt spike threshold % must be 15 or greater")
 		os.Exit(1)
 	}
 
@@ -239,6 +239,7 @@ func main() {
 				if rttDelta < 0 {
 					rttFactor = *rttDecreaseFactor
 				}
+				oldBaselineRtt := baselineRtt
 				baselineRtt = ((1 - rttFactor) * baselineRtt) + (rttFactor * float64(newRtt.Milliseconds()))
 
 				rxBytes := getInterfaceBytes(*downloadInterface, rxBytesMemberAccessor)
@@ -259,7 +260,7 @@ func main() {
 
 				nextUploadRateKilobits := uploadRateKilobits
 				nextDownloadRateKilobits := downloadRateKilobits
-				if (!*ignoreLoss && pingReply.PacketsLost) || rttDelta >= float64(*rttSpikeThresholdMs) {
+				if (!*ignoreLoss && pingReply.PacketsLost) || rttDelta >= (float64(*rttSpikeThresholdPercentage)*oldBaselineRtt/100) {
 					nextDownloadRateKilobits = downloadRateKilobits - uint64(*rateAdjustOnRttSpikeFactor*float64(*maxDownloadRateKilobits-*minDownloadRateKilobits))
 					nextUploadRateKilobits = uploadRateKilobits - uint64(*rateAdjustOnRttSpikeFactor*float64(*maxUploadRateKilobits-*minUploadRateKilobits))
 				} else {
