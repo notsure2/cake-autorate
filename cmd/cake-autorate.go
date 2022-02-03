@@ -310,11 +310,11 @@ func main() {
 				uploadRateKilobits = nextUploadRateKilobits
 
 				log.Printf(
-					"r%%: %d; t%%: %d; base: %.2fms; cur: %s; delta: %.2fms; spike: %v; loss: %v; d: %dKbit; u: %dKbit;\n",
+					"r%%: %d; t%%: %d; base: %.2fms; cur: %.2fms; delta: %.2fms; spike: %v; loss: %v; d: %dKbit; u: %dKbit;\n",
 					rxLoad,
 					txLoad,
 					baselineRtt,
-					newRtt,
+					float64(newRtt.Milliseconds()),
 					rttDelta,
 					rttIsSpiking,
 					pingReply.PacketsLost,
