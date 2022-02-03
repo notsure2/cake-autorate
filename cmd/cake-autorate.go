@@ -295,14 +295,19 @@ func main() {
 					nextUploadRateKilobits = *maxUploadRateKilobits
 				}
 
-				downloadRateKilobits = nextDownloadRateKilobits
-				uploadRateKilobits = nextUploadRateKilobits
 				lastRxBytes = rxBytes
 				lastTxBytes = txBytes
 				lastBytesReadTime = bytesReadTime
 
-				setCakeRate(*downloadInterface, downloadRateKilobits)
-				setCakeRate(*uploadInterface, uploadRateKilobits)
+				if nextDownloadRateKilobits != downloadRateKilobits {
+					setCakeRate(*downloadInterface, nextDownloadRateKilobits)
+				}
+				if nextUploadRateKilobits != uploadRateKilobits {
+					setCakeRate(*uploadInterface, nextUploadRateKilobits)
+				}
+
+				downloadRateKilobits = nextDownloadRateKilobits
+				uploadRateKilobits = nextUploadRateKilobits
 
 				log.Printf(
 					"r%%: %d; t%%: %d; base: %.2fms; cur: %s; delta: %.2fms; spike: %v; loss: %v; d: %dKbit; u: %dKbit;\n",
