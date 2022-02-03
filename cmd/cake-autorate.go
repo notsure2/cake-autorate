@@ -257,10 +257,12 @@ func main() {
 
 				rxLoad := uint64((float64(rxBytesDelta*8/1000) / timeDelta.Seconds() / float64(downloadRateKilobits)) * 100)
 				txLoad := uint64((float64(txBytesDelta*8/1000) / timeDelta.Seconds() / float64(uploadRateKilobits)) * 100)
+				rttIsSpiking := false
 
 				nextUploadRateKilobits := uploadRateKilobits
 				nextDownloadRateKilobits := downloadRateKilobits
 				if (!*ignoreLoss && pingReply.PacketsLost) || rttDelta >= (float64(*rttSpikeThresholdPercentage)*oldBaselineRtt/100) {
+					rttIsSpiking = true
 					nextDownloadRateKilobits = downloadRateKilobits - uint64(*rateAdjustOnRttSpikeFactor*float64(*maxDownloadRateKilobits-*minDownloadRateKilobits))
 					nextUploadRateKilobits = uploadRateKilobits - uint64(*rateAdjustOnRttSpikeFactor*float64(*maxUploadRateKilobits-*minUploadRateKilobits))
 				} else {
@@ -303,12 +305,13 @@ func main() {
 				setCakeRate(*uploadInterface, uploadRateKilobits)
 
 				log.Printf(
-					"rx%%: %d; tx%%: %d; baseRtt: %.2fms; rtt: %s; delta: %.2fms; loss: %v; dl: %dKbit; ul: %dKbit;\n",
+					"r%%: %d; t%%: %d; base: %.2fms; cur: %s; delta: %.2fms; spike: %v; loss: %v; d: %dKbit; u: %dKbit;\n",
 					rxLoad,
 					txLoad,
 					baselineRtt,
 					newRtt,
 					rttDelta,
+					rttIsSpiking,
 					pingReply.PacketsLost,
 					nextDownloadRateKilobits,
 					nextUploadRateKilobits)
