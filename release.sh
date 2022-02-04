@@ -6,7 +6,7 @@ if [ -z "$v" ]; then
 fi
 
 cd $(dirname $0)
-go install github.com/mitchellh/gox
+go get github.com/mitchellh/gox
 rm -rf release
 mkdir release
 cd release
