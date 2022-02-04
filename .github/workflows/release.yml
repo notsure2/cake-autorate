@@ -15,7 +15,7 @@ jobs:
       - name: Build
         run: |
           export PATH=${PATH}:`go env GOPATH`/bin
-          v=${GITHUB_REF#refs/*/} ./release.sh
+          v=${GITHUB_REF#refs/*/} sh ./release.sh
       - name: Release
         uses: softprops/action-gh-release@v1
         with:
