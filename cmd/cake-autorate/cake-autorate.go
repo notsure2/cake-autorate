@@ -1,20 +1,23 @@
 package main
 
 import (
-	"bytes"
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"github.com/go-ping/ping"
 	"github.com/vishvananda/netlink"
+	"github.com/vishvananda/netlink/nl"
+	"golang.org/x/sys/unix"
 	"log"
 	"os"
-	"os/exec"
 	"os/signal"
+	"reflect"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
+	"unsafe"
 )
 
 type PingReply struct {
@@ -23,6 +26,7 @@ type PingReply struct {
 }
 
 var version string
+var netlinkHandleSockets map[int]*nl.SocketHandle
 
 func main() {
 	uploadInterface := flag.String("uploadInterface", "", "upload interface")
@@ -43,7 +47,7 @@ func main() {
 	ignoreLoss := flag.Bool("ignoreLoss", false, "do not consider probe reply loss as bufferbloat (for lossy connections)")
 	askVersion := flag.Bool("version", false, "Print the version number")
 	flag.Parse()
-	
+
 	if *askVersion {
 		fmt.Printf("cake-autorate %s\n", version)
 		os.Exit(0)
@@ -124,6 +128,43 @@ func main() {
 
 	if *rttSpikeThresholdPercentage < 15 {
 		fmt.Println("rtt spike threshold % must be 15 or greater")
+		os.Exit(1)
+	}
+
+	netlinkHandle, err := netlink.NewHandle(unix.NETLINK_ROUTE)
+	if err != nil {
+		log.Println("Failed to open netlink handle")
+		os.Exit(1)
+	}
+
+	// Terrible hack to take out the already opened netlink.Handle.sockets to reuse it
+	netlinkHandleValue := reflect.ValueOf(netlinkHandle).Elem()
+	socketsValue := netlinkHandleValue.Field(0)
+	netlinkHandleSockets = reflect.NewAt(
+		socketsValue.Type(),
+		unsafe.Pointer(socketsValue.UnsafeAddr())).Elem().Interface().(map[int]*nl.SocketHandle)
+
+	downloadInterfaceLink, err := netlinkHandle.LinkByName(*downloadInterface)
+	if err != nil {
+		fmt.Printf("Failed to open download interface '%s': %s\n", *downloadInterface, err)
+		os.Exit(1)
+	}
+
+	uploadInterfaceLink, err := netlinkHandle.LinkByName(*uploadInterface)
+	if err != nil {
+		fmt.Printf("Failed to open upload interface '%s': %s\n", *uploadInterface, err)
+		os.Exit(1)
+	}
+
+	downloadQdisc, err := findQdisc(downloadInterfaceLink)
+	if err != nil {
+		fmt.Printf("%s\n", err)
+		os.Exit(1)
+	}
+
+	uploadQdisc, err := findQdisc(uploadInterfaceLink)
+	if err != nil {
+		fmt.Printf("%s\n", err)
 		os.Exit(1)
 	}
 
@@ -224,8 +265,8 @@ func main() {
 		baselineRtt := float64(pinger.Statistics().MinRtt.Milliseconds())
 		downloadRateKilobits := *maxDownloadRateKilobits / 2
 		uploadRateKilobits := *maxUploadRateKilobits / 2
-		setCakeRate(*downloadInterface, downloadRateKilobits)
-		setCakeRate(*uploadInterface, uploadRateKilobits)
+		setRate(downloadQdisc, downloadRateKilobits)
+		setRate(uploadQdisc, uploadRateKilobits)
 
 		lastRxBytes := getInterfaceBytes(*downloadInterface, rxBytesMemberAccessor)
 		lastTxBytes := getInterfaceBytes(*uploadInterface, txBytesMemberAccessor)
@@ -310,10 +351,10 @@ func main() {
 				lastBytesReadTime = bytesReadTime
 
 				if nextDownloadRateKilobits != downloadRateKilobits {
-					setCakeRate(*downloadInterface, nextDownloadRateKilobits)
+					setRate(downloadQdisc, nextDownloadRateKilobits)
 				}
 				if nextUploadRateKilobits != uploadRateKilobits {
-					setCakeRate(*uploadInterface, nextUploadRateKilobits)
+					setRate(uploadQdisc, nextUploadRateKilobits)
 				}
 
 				downloadRateKilobits = nextDownloadRateKilobits
@@ -357,8 +398,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	setCakeRate(*downloadInterface, *maxDownloadRateKilobits)
-	setCakeRate(*uploadInterface, *maxUploadRateKilobits)
+	setRate(downloadQdisc, *maxDownloadRateKilobits)
+	setRate(uploadQdisc, *maxUploadRateKilobits)
 
 	statistics := pinger.Statistics()
 	if statistics != nil {
@@ -366,22 +407,54 @@ func main() {
 	}
 }
 
-func setCakeRate(interfaceName string, kilobitsPerSecond uint64) {
-	cmd := exec.Command("tc", "qdisc", "change", "root", "dev", interfaceName, "cake", "bandwidth", fmt.Sprintf("%dKbit", kilobitsPerSecond))
-	output, err := cmd.CombinedOutput()
-	output = bytes.Trim(output, "\n")
+func setRate(qdisc *netlink.Qdisc, kilobitsPerSecond uint64) {
+	req := nl.NewNetlinkRequest(unix.RTM_NEWQDISC, unix.NLM_F_ACK)
+	req.Sockets = netlinkHandleSockets
+	base := (*qdisc).Attrs()
+	msg := &nl.TcMsg{
+		Family:  nl.FAMILY_ALL,
+		Ifindex: int32(base.LinkIndex),
+		Handle:  base.Handle,
+		Parent:  base.Parent,
+	}
+	req.AddData(msg)
+
+	req.AddData(nl.NewRtAttr(nl.TCA_KIND, nl.ZeroTerminated((*qdisc).Type())))
+	options := nl.NewRtAttr(nl.TCA_OPTIONS, nil)
+	options.AddRtAttr(TCA_CAKE_BASE_RATE64, nl.Uint64Attr(kilobitsPerSecond*1000/8))
+	req.AddData(options)
+
+	_, err := req.Execute(unix.NETLINK_ROUTE, 0)
+
 	if err != nil {
-		log.Printf("Failed to set qdisc rate %d for %s: %s - %s\n", kilobitsPerSecond, interfaceName, err, output)
+		log.Printf("Failed to change qdisc: %s\n", err)
 	}
 }
 
 func getInterfaceBytes(interfaceName string, memberAccessor func(statistics *netlink.LinkStatistics) uint64) uint64 {
-	interfaceObj, err := netlink.LinkByName(interfaceName)
+	interfaceLink, err := netlink.LinkByName(interfaceName)
 	if err != nil {
-		log.Printf("Failed to get interface through netlink: %s\n", err)
+		log.Printf("Failed to open interface '%s': %s\n", interfaceName, err)
 		return 0
 	}
 
-	statistics := interfaceObj.Attrs().Statistics
+	statistics := interfaceLink.Attrs().Statistics
 	return memberAccessor(statistics)
+}
+
+func findQdisc(interfaceLink netlink.Link) (*netlink.Qdisc, error) {
+	qdiscs, err := netlink.QdiscList(interfaceLink)
+	if err != nil {
+		fmt.Printf("Failed to list interface '%s' qdiscs: %s\n", interfaceLink.Attrs().Name, err)
+		os.Exit(1)
+	}
+
+	for _, qdisc := range qdiscs {
+		if qdisc.Type() == "cake" {
+			return &qdisc, nil
+		}
+	}
+
+	err = errors.New(fmt.Sprintf("Failed to find a cake qdisc on '%s'", interfaceLink.Attrs().Name))
+	return nil, err
 }
