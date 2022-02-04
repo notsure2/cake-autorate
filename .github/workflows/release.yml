@@ -3,6 +3,8 @@ on:
     tags:
       - 'v*'
 
+  workflow_dispatch:
+
 name: Create Release
 
 jobs:
