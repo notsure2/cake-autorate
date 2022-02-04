@@ -22,6 +22,8 @@ type PingReply struct {
 	PacketsLost bool
 }
 
+var version string
+
 func main() {
 	uploadInterface := flag.String("uploadInterface", "", "upload interface")
 	downloadInterface := flag.String("downloadInterface", "", "download interface (usually ifbX)")
@@ -39,7 +41,13 @@ func main() {
 	rttSpikeThresholdPercentage := flag.Uint64("rttSpikeThresholdPercentage", 50, "increase from baseline RTT for detection of bufferbloat in percent")
 	reflectorHost := flag.String("reflectorHost", "1.1.1.1", "host to use for measuring ping")
 	ignoreLoss := flag.Bool("ignoreLoss", false, "do not consider probe reply loss as bufferbloat (for lossy connections)")
+	askVersion := flag.Bool("version", false, "Print the version number")
 	flag.Parse()
+	
+	if *askVersion {
+		fmt.Printf("cake-autorate %s\n", version)
+		os.Exit(0)
+	}
 
 	if *uploadInterface == "" {
 		fmt.Println("upload interface must be specified.")
@@ -140,6 +148,8 @@ func main() {
 			return statistics.TxBytes
 		}
 	}
+
+	log.Printf("cake-autorate %s\n", version)
 
 	log.Printf(
 		"uploadInterface: %s (max: %d kbps - min: %d kbps)\n",
