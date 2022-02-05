@@ -45,6 +45,7 @@ func main() {
 	rttSpikeThresholdMs := flag.Uint64("rttSpikeThresholdMs", 50, "increase from baseline RTT for detection of bufferbloat in ms")
 	reflectorHost := flag.String("reflectorHost", "1.1.1.1", "host to use for measuring ping")
 	ignoreLoss := flag.Bool("ignoreLoss", false, "do not consider probe reply loss as bufferbloat (for lossy connections)")
+	beQuiet := flag.Bool("quiet", false, "suppress operational output")
 	askVersion := flag.Bool("version", false, "Print the version number")
 	flag.Parse()
 
@@ -359,17 +360,19 @@ func main() {
 				downloadRateKilobits = nextDownloadRateKilobits
 				uploadRateKilobits = nextUploadRateKilobits
 
-				log.Printf(
-					"r%%: %d; t%%: %d; base: %.2fms; cur: %.2fms; delta: %.2fms; spike: %v; loss: %v; d: %dKbit; u: %dKbit;\n",
-					rxLoad,
-					txLoad,
-					baselineRtt,
-					float64(newRtt.Milliseconds()),
-					rttDelta,
-					rttIsSpiking,
-					pingReply.PacketsLost,
-					nextDownloadRateKilobits,
-					nextUploadRateKilobits)
+				if !*beQuiet {
+					log.Printf(
+						"r%%: %d; t%%: %d; base: %.2fms; cur: %.2fms; delta: %.2fms; spike: %v; loss: %v; d: %dKbit; u: %dKbit;\n",
+						rxLoad,
+						txLoad,
+						baselineRtt,
+						float64(newRtt.Milliseconds()),
+						rttDelta,
+						rttIsSpiking,
+						pingReply.PacketsLost,
+						nextDownloadRateKilobits,
+						nextUploadRateKilobits)
+				}
 			}
 
 			if breakLoop {
