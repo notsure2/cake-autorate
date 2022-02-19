@@ -360,16 +360,25 @@ func main() {
 				downloadRateKilobits = nextDownloadRateKilobits
 				uploadRateKilobits = nextUploadRateKilobits
 
+				loss := 0
+				if pingReply.PacketsLost {
+					loss = 1
+				}
+
+				spike := 0
+				if rttIsSpiking {
+					spike = 1
+				}
+
 				if !*beQuiet {
 					log.Printf(
-						"r%%: %d; t%%: %d; base: %.2fms; cur: %.2fms; delta: %.2fms; spike: %v; loss: %v; d: %dKbit; u: %dKbit;\n",
+						"r%%: %3d; t%%: %3d; base: %3.0fms; delta: %3.0fms; spike: %d; loss: %d; d: %dKbit; u: %dKbit;\n",
 						rxLoad,
 						txLoad,
 						baselineRtt,
-						float64(newRtt.Milliseconds()),
 						rttDelta,
-						rttIsSpiking,
-						pingReply.PacketsLost,
+						spike,
+						loss,
 						nextDownloadRateKilobits,
 						nextUploadRateKilobits)
 				}
