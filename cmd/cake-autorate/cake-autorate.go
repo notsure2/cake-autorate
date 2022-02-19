@@ -127,8 +127,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	if *rttSpikeThresholdMs < 15 {
-		fmt.Println("rtt spike threshold ms must be 15 or greater")
+	if *rttSpikeThresholdMs < 1 {
+		fmt.Println("rtt spike threshold ms must be 1 or greater")
 		os.Exit(1)
 	}
 
