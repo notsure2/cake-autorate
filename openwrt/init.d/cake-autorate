@@ -1,0 +1,75 @@
+#!/bin/sh /etc/rc.common
+. /lib/functions.sh
+
+START=90
+
+launch_instance() {
+	local section="$1"
+	config_get enabled "$section" enabled
+
+	[ "$enabled" == "0" -o "$enabled" == "no" -o "$enabled" == "off" ] && {
+		logger -t warn "cake-autorate instance $section is not enabled."
+		return;
+	}
+
+	config_get downloadInterface "$section" downloadInterface
+	config_get uploadInterface "$section" uploadInterface
+	config_get reflector "$section" reflector
+	config_get rttSpikeThreshold "$section" rttSpikeThreshold
+	uploadRate=$(uci get sqm.$section.upload)
+	downloadRate=$(uci get sqm.$section.download)
+
+	[ -z "$uploadRate" -o -z "$downloadRate" ] && {
+		logger -s -t warn "cake-autorate instance $section is enabled but sqm upload or download are not set."
+		return;		
+	}
+
+	[ ! -z "$(screen -ls | grep cake-autorate-$section)" ] && {
+		logger -s -t warn "cake-autorate instance $section is already started."
+		return;
+	}
+
+	logger -s -t info "cake-autorate starting on $section"
+	gatewayIp=$(ip route show dev $uploadInterface | grep 'default via' | awk '{print $3}')
+	ip route replace $reflector/32 dev $uploadInterface via $gatewayIp
+	screen -d -m -S cake-autorate-$section \
+		/usr/local/bin/cake-autorate \
+		-uploadInterface $uploadInterface \
+		-downloadInterface $downloadInterface \
+		-tickDuration 100ms \
+		-loadThreshold 60 \
+		-maxUploadRate $uploadRate \
+		-minUploadRate $(($uploadRate * 20/100)) \
+		-maxDownloadRate $downloadRate \
+		-reflectorHost $reflector \
+		-ignoreLoss \
+		-rateAdjustOnRttSpikeFactor 0.02 \
+		-rateLoadIncreaseFactor 0.01 \
+		-rateLoadDecreaseFactor 0.00125 \
+		-rttIncreaseFactor 0.001 \
+		-rttSpikeThresholdMs $rttSpikeThreshold
+}
+
+reload() {
+        stop;
+	start;
+}
+
+start() {
+	config_load cake-autorate
+	config_foreach launch_instance cake-autorate
+}
+
+stop() {
+	SCREENS="$(screen -ls | grep cake-autorate | cut -f2 -d. | cut -f1)"
+	for screen in $SCREENS; do
+		[ -z "$screen" ] && continue;
+		logger -s -t info "Stopping cake-autorate screen $screen"
+		screen -S "$screen" -p 0 -X stuff $'\003' >/dev/null 2>/dev/null
+		sleep 2
+	done
+}
+
+service_triggers() {
+	procd_add_reload_trigger cake-autorate sqm
+}

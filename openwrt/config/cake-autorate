@@ -1,0 +1,16 @@
+package cake-autorate
+
+config 'cake-autorate' 'eth0'
+	option 'enabled' '1'
+	option 'downloadInterface' 'ifb4eth0'
+	option 'uploadInterface' 'eth0'
+	option 'reflector' '8.8.8.8'
+	option 'rttSpikeThreshold' 30
+
+config 'cake-autorate' 'eth1'
+	option 'enabled' '0'
+	option 'downloadInterface' 'ifb4eth1'
+	option 'uploadInterface' 'eth1'
+	option 'reflector' '8.8.4.4'
+	option 'rttSpikeThreshold' 100
+
