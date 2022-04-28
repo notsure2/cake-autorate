@@ -1,6 +1,6 @@
 module cake-autorate
 
-go 1.17
+go 1.18
 
 require (
 	github.com/go-ping/ping v0.0.0-20211130115550-779d1e919534
@@ -10,7 +10,6 @@ require (
 require (
 	github.com/google/uuid v1.2.0 // indirect
 	github.com/hashicorp/go-version v1.0.0 // indirect
-	github.com/mitchellh/gox v1.0.1 // indirect
 	github.com/mitchellh/iochan v1.0.0 // indirect
 	github.com/vishvananda/netns v0.0.0-20200728191858-db3c7e526aae // indirect
 	golang.org/x/net v0.0.0-20210316092652-d523dce5a7f4 // indirect
