@@ -14,5 +14,5 @@ cd release
 OUTPUT="{{.Dir}}-{{.OS}}-{{.Arch}}-$v"
 gox -ldflags "-X main.version=${v}" -os="linux" -output="$OUTPUT" ../cmd/*
 OUTPUT="{{.Dir}}-{{.OS}}-{{.Arch}}-softfloat-$v"
-GOMIPS="softfloat" GOARM="5" gox -arch "arm mips" -ldflags "-X main.version=${v}" -os="linux" -output="$OUTPUT" ../cmd/*
+GOMIPS="softfloat" GOARM="5" gox -arch "arm mips mipsle mips64 mips64le" -ldflags "-X main.version=${v}" -os="linux" -output="$OUTPUT" ../cmd/*
 
