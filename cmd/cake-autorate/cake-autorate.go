@@ -39,6 +39,7 @@ func main() {
 	rttIncreaseFactor := flag.Float64("rttIncreaseFactor", 0.001, "how rapidly baseline RTT is allowed to increase")
 	rttDecreaseFactor := flag.Float64("rttDecreaseFactor", 0.9, "how rapidly baseline RTT is allowed to decrease")
 	rateAdjustOnRttSpikeFactor := flag.Float64("rateAdjustOnRttSpikeFactor", 0.05, "how rapidly to reduce bandwidth upon detection of bufferbloat")
+	rateAdjustOnRttSpikeInterval := flag.Duration("rateAdjustOnRttSpikeInterval", 500*time.Millisecond, "how often to decrease the rate on detection of bufferbloat")
 	rateLoadIncreaseFactor := flag.Float64("rateLoadIncreaseFactor", 0.0125, "how rapidly to increase bandwidth upon high load detected")
 	rateLoadDecreaseFactor := flag.Float64("rateLoadDecreaseFactor", 0, "how rapidly to decrease bandwidth upon low load detected")
 	loadThreshold := flag.Uint64("loadThreshold", 50, "% of currently set bandwidth for detecting high load")
@@ -274,6 +275,7 @@ func main() {
 		lastBytesReadTime := time.Now()
 
 		ticker := time.NewTicker(*tickDuration)
+		lastRateDecreaseDuration := time.Now()
 
 		for {
 			breakLoop := false
@@ -314,8 +316,12 @@ func main() {
 				nextDownloadRateKilobits := downloadRateKilobits
 				if (!*ignoreLoss && pingReply.PacketsLost) || rttDelta >= float64(*rttSpikeThresholdMs) {
 					rttIsSpiking = true
-					nextDownloadRateKilobits = downloadRateKilobits - uint64(*rateAdjustOnRttSpikeFactor*float64(*maxDownloadRateKilobits-*minDownloadRateKilobits))
-					nextUploadRateKilobits = uploadRateKilobits - uint64(*rateAdjustOnRttSpikeFactor*float64(*maxUploadRateKilobits-*minUploadRateKilobits))
+
+					if time.Since(lastRateDecreaseDuration) >= *rateAdjustOnRttSpikeInterval {
+						nextDownloadRateKilobits = downloadRateKilobits - uint64(*rateAdjustOnRttSpikeFactor*float64(*maxDownloadRateKilobits-*minDownloadRateKilobits))
+						nextUploadRateKilobits = uploadRateKilobits - uint64(*rateAdjustOnRttSpikeFactor*float64(*maxUploadRateKilobits-*minUploadRateKilobits))
+						lastRateDecreaseDuration = time.Now()
+					}
 				} else {
 					if rxLoad >= *loadThreshold {
 						nextDownloadRateKilobits = downloadRateKilobits + uint64(*rateLoadIncreaseFactor*float64(*maxDownloadRateKilobits-*minDownloadRateKilobits))
