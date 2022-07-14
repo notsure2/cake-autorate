@@ -256,6 +256,7 @@ func main() {
 
 	tickerExitChannel := make(chan *error)
 	go func() {
+		defer func() { tickerExitChannel <- nil }()
 		log.Printf("Collecting initial sample of ping replies...")
 		select {
 		case <-ctx.Done():
@@ -394,7 +395,6 @@ func main() {
 				break
 			}
 		}
-		tickerExitChannel <- nil
 	}()
 
 	errorExit := false
